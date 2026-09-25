@@ -1,0 +1,10 @@
+The zoraxy_plugin library in this directory is copied as-is from the Zoraxy
+project (https://github.com/aroz-online/zoraxy).
+
+Per the official Zoraxy plugin licensing notes, the plugin library and
+interface are open source under the LGPL license and may be used without
+disclosing the plugin source code as long as the library is not modified and
+is used as-is.
+
+This bundled copy is NOT modified and remains under its original license
+(LGPL-3.0). See https://zoraxy.aroz.org for the official licensing notes.

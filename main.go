@@ -85,7 +85,7 @@ func serveIntrospectAndConfigure() *plugin.ConfigureSpec {
 		ID:            PLUGIN_ID,
 		Name:          PLUGIN_NAME,
 		Author:        "Daniel Heise",
-		AuthorContact: "",
+		AuthorContact: "post@mcfetz.de",
 		Description:   "Scans Docker hosts for published ports, applies them as upstreams of Zoraxy proxy rules, deep-links linked rules and switches all upstreams to another host in case of failure.",
 		URL:           "https://github.com/mcfetz/zoraxy-docker-upstream-manager",
 		Type:          plugin.PluginType_Utilities,

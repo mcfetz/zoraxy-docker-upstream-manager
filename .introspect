@@ -2,7 +2,7 @@
  "id": "de.mcfetz.zoraxy.docker_upstream_manager",
  "name": "Docker Upstream Manager",
  "author": "Daniel Heise",
- "author_contact": "",
+ "author_contact": "post@mcfetz.de",
  "description": "Scans Docker hosts for published ports, applies them as upstreams of Zoraxy proxy rules, deep-links linked rules and switches all upstreams to another host in case of failure.",
  "url": "https://github.com/mcfetz/zoraxy-docker-upstream-manager",
  "type": 1,

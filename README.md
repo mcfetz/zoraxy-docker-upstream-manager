@@ -153,5 +153,6 @@ active. The result list reports switched / skipped / errors per rule.
 
 ## License
 
-The `zoraxy_plugin` library is LGPL (used as-is, per the plugin licensing
-notes). The plugin code is AGPL-3.0 unless you decide otherwise.
+This plugin is licensed under the AGPL-3.0 license (see `LICENSE`). The bundled
+`mod/zoraxy_plugin` library is copied as-is from the Zoraxy project and
+remains under its original LGPL license (see `mod/zoraxy_plugin/LICENSE`).
