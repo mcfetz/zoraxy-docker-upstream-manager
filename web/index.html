@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{.csrfToken}}">
+<title>Docker Port Selector</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1b1c1d;
+    --muted: #6c757d;
+    --border: #d4d4d5;
+    --panel: #f7f7f9;
+    --accent: #1678c2;
+    --accent-fg: #ffffff;
+    --ok: #21ba45;
+    --warn: #f2c037;
+    --err: #db2828;
+    --link: #7c3aed;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  body.darkTheme {
+    --bg: #1b1c1d;
+    --fg: #e8e8e8;
+    --muted: #9a9a9a;
+    --border: #3a3a3c;
+    --panel: #262728;
+    --accent: #2185d0;
+    --accent-fg: #ffffff;
+    --link: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 20px 0 8px; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+  .grow { flex: 1; }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .card .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .card .row + .row { margin-top: 6px; }
+  .host-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .host-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    padding: 10px 12px;
+    min-width: 260px;
+  }
+  .host-card .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+  .host-card .status-dot.online { background: var(--ok); }
+  .host-card .status-dot.offline { background: var(--err); }
+  input[type=text], input[type=number], select, textarea {
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 6px 0 2px; }
+  .inline { display: inline-flex; align-items: center; gap: 6px; width: auto; }
+  .checkbox-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); cursor: pointer; }
+  button {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  button.ok { background: var(--ok); }
+  button.warn { background: var(--warn); color: #000; }
+  button.err { background: transparent; color: var(--err); border: 1px solid var(--err); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px;
+    border-radius: 10px; color: var(--accent-fg); white-space: nowrap;
+  }
+  .badge.published { background: var(--accent); }
+  .badge.private { background: var(--ok); }
+  .badge.name { background: var(--muted); }
+  .badge.linked { background: var(--link); color: #fff; }
+  .state-running { color: var(--ok); }
+  .state-stopped { color: var(--err); }
+  .ampel { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
+  .ampel.ok { background: var(--ok); box-shadow: 0 0 4px var(--ok); }
+  .ampel.bad { background: var(--err); box-shadow: 0 0 4px var(--err); }
+  .linked-to { font-size: 12px; word-break: break-all; }
+  .linked-origin { color: var(--muted); font-size: 11px; }
+  .proxy-rule-link {
+    color: var(--link); cursor: pointer; text-decoration: underline;
+    text-underline-offset: 2px; font-weight: 600;
+  }
+  .proxy-rule-link:hover { filter: brightness(1.2); }
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 700; line-height: 1;
+    padding: 2px 5px; border-radius: 3px; margin-right: 4px; vertical-align: 1px;
+    color: #fff; text-transform: lowercase;
+  }
+  .badge.svc { background: #4a9eff; }
+  .badge.ctr { background: #7b6cd8; }
+  .msg { position: fixed; right: 16px; bottom: 16px; padding: 10px 14px; border-radius: 6px; color: #fff; display: none; max-width: 420px; z-index: 10; }
+  .msg.ok { background: var(--ok); }
+  .msg.err { background: var(--err); }
+  .msg.info { background: var(--accent); }
+  .empty { color: var(--muted); text-align: center; padding: 24px; }
+  details.editor { margin-top: 10px; }
+  details.editor summary { cursor: pointer; color: var(--accent); }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  .form-actions { margin-top: 10px; }
+  .endpoint-hint { font-size: 12px; color: var(--muted); }
+  .loading { opacity: 0.4; pointer-events: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not(:has(body.darkTheme)) { --bg: #1b1c1d; --fg: #e8e8e8; --muted: #9a9a9a; --border: #3a3a3c; --panel: #262728; }
+  }
+</style>
+</head>
+<body>
+<h1>Docker Port Selector</h1>
+<div class="muted">Scan Docker hosts for published ports and apply them as upstream origins of Zoraxy proxy rules.</div>
+
+<h2>Target Proxy Rule</h2>
+<div class="card">
+  <div class="row">
+    <select id="endpointSelect" class="grow" style="min-width:220px;">
+      <option value="">Select a proxy rule ...</option>
+    </select>
+    <button id="reloadEndpoints" class="secondary small" title="Reload endpoint list">Reload</button>
+  </div>
+  <div class="endpoint-hint">The selected rule is the one you are editing in Zoraxy. Use "Set as upstream" below to attach a Docker port to it.</div>
+</div>
+
+<h2>Docker Hosts</h2>
+<div class="toolbar">
+  <button id="addHostBtn" class="ghost small">+ Add host</button>
+  <button id="scanBtn" class="small">Scan all hosts</button>
+  <label class="checkbox-label"><input type="checkbox" id="autoRefresh"> Auto-refresh (every <input type="number" id="pollSeconds" style="width:56px;" min="2" max="3600" value="10">s)</label>
+</div>
+
+<details class="editor" id="hostEditor" open>
+  <summary id="hostEditorSummary">Add Docker host</summary>
+  <div class="card">
+    <div class="form-grid">
+      <div><label>Name (optional)</label><input type="text" id="hName" placeholder="my server"></div>
+      <div><label>Endpoint</label><input type="text" id="hEndpoint" placeholder="unix:///var/run/docker.sock | tcp://192.168.1.10:2375 | tcps://192.168.1.10:2376"></div>
+      <div><label>Suggest upstream IP (optional, overrides endpoint IP)</label><input type="text" id="hSuggestIP" placeholder="192.168.1.10"></div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:8px;">
+      <label class="inline">TLS <input type="checkbox" id="hTLS"></label>
+      <label class="inline">Skip TLS verify <input type="checkbox" id="hInsecure"></label>
+      <div style="flex:1; min-width:180px;"><label>CA cert path</label><input type="text" style="width:100%;" id="hCACert" placeholder=""></div>
+      <div style="flex:1; min-width:180px;"><label>Client cert path</label><input type="text" style="width:100%;" id="hCert" placeholder=""></div>
+      <div style="flex:1; min-width:180px;"><label>Client key path</label><input type="text" style="width:100%;" id="hKey" placeholder=""></div>
+    </div>
+    <div class="form-actions">
+      <button id="saveHostBtn" class="ok small">Save host</button>
+      <button id="cancelHostBtn" class="ghost small" hidden>Cancel</button>
+    </div>
+  </div>
+</details>
+
+<div id="hostList" class="host-grid"></div>
+
+<h2>Bulk Upstream Switch</h2>
+<div class="card">
+  <div class="endpoint-hint">Move the upstreams of Zoraxy proxy rules from one Docker host to another (ports stay unchanged). First show the affected rules, then pick the ones to switch.</div>
+  <div class="row" style="margin-top:6px;">
+    <label class="muted" style="white-space:nowrap;">from</label>
+    <select id="switchFrom" class="grow" style="min-width:140px;"></select>
+    <span class="muted">&rarr;</span>
+    <label class="muted" style="white-space:nowrap;">to</label>
+    <select id="switchTo" class="grow" style="min-width:140px;"></select>
+    <button id="switchPreviewBtn" class="small">Show affected rules</button>
+  </div>
+  <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+    <div class="checkbox-label"><label><input type="checkbox" id="switchSelectAll" checked> Select all</label></div>
+    <div id="switchList" class="muted" style="font-size:12px;line-height:1.6;margin-top:4px;max-height:300px;overflow:auto;"></div>
+    <div class="row" style="margin-top:8px;">
+      <button id="switchBtn" class="small" disabled>Switch selected rules</button>
+      <span id="switchCount" class="muted" style="font-size:12px;"></span>
+    </div>
+  </div>
+  <div id="switchResult" class="muted" style="font-size:12px;margin-top:8px;line-height:1.6;"></div>
+</div>
+
+<h2>Published Ports / Upstream Candidates</h2>
+<div class="toolbar">
+  <input type="text" id="searchBox" class="grow" placeholder="Search container / address / image ...">
+  <label class="checkbox-label"><input type="checkbox" id="onlyRunning" checked> Only running</label>
+</div>
+<div id="scanResult" class="loading">
+  <div class="empty">Click "Scan all hosts" to list containers and their published ports.</div>
+</div>
+
+<div id="msgBox" class="msg"></div>
+
+<script>
+"use strict";
+
+const $ = (sel) => document.querySelector(sel);
+const $all = (sel) => document.querySelectorAll(sel);
+
+let endpoints = [];
+let pollingTimer = null;
+
+// CSRF token injected by Zoraxy's plugin UI proxy (X-Zoraxy-Csrf header,
+// replaced into the {{.csrfToken}} placeholder). Empty when running standalone.
+// loadCSRF() refreshes it at runtime so a cached page still gets a valid token.
+const _csrfMeta = document.querySelector('meta[name="csrf-token"]');
+let CSRF_TOKEN = _csrfMeta && _csrfMeta.content
+  && _csrfMeta.content !== "{{.csrfToken}}"
+  && _csrfMeta.content !== "missing-csrf-token"
+  ? _csrfMeta.content : "";
+
+// ---------- helpers ----------
+function esc(text) {
+  const div = document.createElement("div");
+  div.textContent = String(text ?? "");
+  return div.innerHTML;
+}
+
+function showMsg(text, type) {
+  const box = $("#msgBox");
+  box.textContent = text;
+  box.className = "msg " + (type || "info");
+  box.style.display = "block";
+  clearTimeout(box._t);
+  box._t = setTimeout(() => { box.style.display = "none"; }, 4000);
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  const method = (opts.method || "GET").toUpperCase();
+  const headers = Object.assign({}, opts.headers || {});
+  if (method !== "GET" && method !== "HEAD" && CSRF_TOKEN) {
+    headers["X-CSRF-Token"] = CSRF_TOKEN;
+  }
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  let data = null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    data = await res.json();
+  }
+  return { status: res.status, data };
+}
+
+// Fetch the live CSRF token Zoraxy forwarded to this plugin on the latest
+// request. Overrides the (possibly stale) meta value on each page load.
+async function loadCSRF() {
+  try {
+    const { data } = await api("api/csrf");
+    if (data && data.csrf_token) {
+      CSRF_TOKEN = data.csrf_token;
+    }
+  } catch (e) { /* keep meta value */ }
+}
+
+function formBody(obj) {
+  const params = new URLSearchParams();
+  Object.entries(obj).forEach(([k, v]) => params.set(k, v == null ? "" : v));
+  return params;
+}
+
+// ---------- config ----------
+let hosts = [];
+
+async function loadConfig() {
+  const { data } = await api("api/config");
+  if (data && data.hosts) {
+    hosts = data.hosts;
+    $("#pollSeconds").value = data.polling_interval_seconds || 10;
+    renderHosts();
+  }
+}
+
+function renderHosts() {
+  const list = $("#hostList");
+  list.innerHTML = "";
+  if (!hosts.length) {
+    list.innerHTML = `<div class="empty">No docker hosts configured yet.</div>`;
+    return;
+  }
+  hosts.forEach((h) => {
+    const el = document.createElement("div");
+    el.className = "host-card";
+    el.innerHTML = `
+      <div class="row">
+        <span class="status-dot" data-status-for="${esc(h.id)}"></span>
+        <b>${esc(h.name || h.id)}</b>
+        <span class="mono muted" style="font-size:12px;">${esc(h.endpoint)}</span>
+        <span class="grow"></span>
+        <button class="secondary small btn-ping" data-id="${esc(h.id)}">Ping</button>
+        <button class="ghost small btn-edit" data-id="${esc(h.id)}">Edit</button>
+        <button class="err small btn-remove" data-id="${esc(h.id)}">Remove</button>
+      </div>
+      ${h.suggest_ip ? `<div class="row muted" style="font-size:12px;">Suggested IP: ${esc(h.suggest_ip)}</div>` : ""}`;
+    list.appendChild(el);
+  });
+  list.querySelectorAll(".btn-ping").forEach((b) =>
+    b.addEventListener("click", () => pingHost(b.dataset.id))
+  );
+  list.querySelectorAll(".btn-edit").forEach((b) =>
+    b.addEventListener("click", () => openEditor(hosts.find((x) => x.id === b.dataset.id)))
+  );
+  list.querySelectorAll(".btn-remove").forEach((b) =>
+    b.addEventListener("click", () => removeHost(b.dataset.id))
+  );
+  populateSwitchSelects();
+}
+
+// Fills the bulk switch source/target dropdowns with the known docker hosts.
+function populateSwitchSelects() {
+  const from = $("#switchFrom");
+  const to = $("#switchTo");
+  const names = hosts.map((h) => h.name || "").filter((n) => n);
+  const opts = names.length
+    ? names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")
+    : `<option value="">(no hosts configured)</option>`;
+  from.innerHTML = opts;
+  to.innerHTML = opts;
+  if (names.length >= 2) {
+    from.value = names[0];
+    to.value = names[1];
+  }
+}
+
+async function showSwitchPreview() {
+  const from = $("#switchFrom").value;
+  const to = $("#switchTo").value;
+  if (!from || !to) {
+    showMsg("Configure docker hosts first", "err");
+    return;
+  }
+  if (from.toLowerCase() === to.toLowerCase()) {
+    showMsg("Source and target host must differ", "err");
+    return;
+  }
+  const btn = $("#switchPreviewBtn");
+  btn.disabled = true;
+  btn.textContent = "Loading ...";
+  try {
+    const { data } = await api("api/upstream/switch/preview", {
+      method: "POST",
+      body: formBody({ from, to }),
+    });
+    renderSwitchPreview(data);
+  } catch (e) {
+    showMsg("Preview failed: " + e.message, "err");
+  }
+  btn.disabled = false;
+  btn.textContent = "Show affected rules";
+}
+
+function renderSwitchPreview(res) {
+  const list = $("#switchList");
+  const count = $("#switchCount");
+  if (!res || res.error) {
+    list.innerHTML = `<span style="color:var(--err);">${esc((res && res.error) || "no response")}</span>`;
+    count.textContent = "";
+    updateSwitchActions();
+    return;
+  }
+  const rules = res.rules || [];
+  const totalOrigins = rules.reduce((n, r) => n + (r.actions ? r.actions.length : 0), 0);
+  list.innerHTML = !rules.length
+    ? `<div class="empty">No rules are affected by ${esc(res.from)} &rarr; ${esc(res.to)}.</div>`
+    : rules.map((r) => {
+        const actions = (r.actions || []).map((a) => {
+          const owner = a.owner && a.owner.kind
+            ? `<span class="badge ${a.owner.kind === "service" ? "svc" : "ctr"}" title="${esc(a.owner.name || "")}">${a.owner.kind === "service" ? "service" : "container"}</span> `
+            : "";
+          if (a.kind === "drop") {
+            return `<div style="color:var(--err);padding-left:2px;">${owner}${esc(a.origin)} <span class="muted">&rarr;</span> dropped (target exists)</div>`;
+          }
+          return `<div style="padding-left:2px;">${owner}${esc(a.origin)} <span class="muted">&rarr;</span> <b>${esc(a.new_origin)}</b></div>`;
+        }).join("");
+        return `<div class="row" style="align-items:flex-start;">
+          <label style="margin-top:2px;"><input type="checkbox" class="switch-rule" value="${esc(r.domain)}" checked></label>
+          <div class="grow">
+            <div><b>${esc(r.domain)}</b> <span class="muted">(${r.actions.length} origin${r.actions.length === 1 ? "" : "s"})</span></div>
+            <div style="margin-top:2px;">${actions}</div>
+          </div>
+        </div>`;
+      }).join("");
+  count.textContent = `${rules.length} rule${rules.length === 1 ? "" : "s"} affected`;
+  $("#switchSelectAll").checked = true;
+  updateSwitchActions();
+}
+
+function updateSwitchActions() {
+  const boxes = $all(".switch-rule");
+  const selected = [...boxes].filter((b) => b.checked).length;
+  const btn = $("#switchBtn");
+  btn.disabled = selected === 0;
+  $("#switchCount").textContent = selected ? `${selected} selected` : "no rules selected";
+  $("#switchSelectAll").checked = boxes.length > 0 && selected === boxes.length;
+}
+
+async function executeSelectedSwitch() {
+  const from = $("#switchFrom").value;
+  const to = $("#switchTo").value;
+  const selected = [...$all(".switch-rule")].filter((b) => b.checked).map((b) => b.value);
+  if (!selected.length) {
+    showMsg("Select at least one rule first", "err");
+    return;
+  }
+  if (!confirm("Switch " + selected.length + " selected rule(s) from " + from + " to " + to + "?\nPorts stay unchanged. (source host does not need to be online)")) {
+    return;
+  }
+  const btn = $("#switchBtn");
+  btn.disabled = true;
+  btn.textContent = "Switching ...";
+  try {
+    const { data } = await api("api/upstream/switch", {
+      method: "POST",
+      body: formBody({ from, to, rules: selected.join(",") }),
+    });
+    renderSwitchResult(data);
+    // The affected lists changed; refresh the preview so the leftover rules
+    // reflect the new state.
+    if (data && data.switched && data.switched.length) {
+      const preview = await api("api/upstream/switch/preview", {
+        method: "POST",
+        body: formBody({ from, to }),
+      });
+      renderSwitchPreview(preview.data);
+    }
+  } catch (e) {
+    showMsg("Switch failed: " + e.message, "err");
+  }
+  btn.disabled = false;
+  btn.textContent = "Switch selected rules";
+}
+
+function renderSwitchResult(res) {
+  const box = $("#switchResult");
+  if (!res || res.error) {
+    box.innerHTML = `<span style="color:var(--err);">${esc((res && res.error) || "no response")}</span>`;
+    return;
+  }
+  const switched = (res.switched || []).map((d) =>
+    `<div style="color:var(--ok);">${esc(d.domain)} &mdash; ${esc(d.origin)} <span class="muted">&rarr;</span> ${esc(d.detail)}</div>`).join("");
+  const skipped = (res.skipped || []).map((d) =>
+    `<div style="color:var(--muted);">${esc(d.domain)} &mdash; ${esc(d.origin)} (${esc(d.detail)})</div>`).join("");
+  const errors = (res.errors || []).map((d) =>
+    `<div style="color:var(--err);">${esc(d.domain || "")} ${esc(d.origin || d.detail)} ${d.domain && d.origin ? "&mdash; " + esc(d.detail) : ""}</div>`).join("");
+  const summary =
+    `<b>${res.from} &rarr; ${res.to}</b>: ${res.switched.length} switched, ${res.skipped.length} skipped, ${res.errors.length} errors`;
+  box.innerHTML =
+    `<div>${esc(summary)}</div>` +
+    (switched ? `<div style="margin-top:4px;">${switched}</div>` : "") +
+    (errors ? `<div style="margin-top:4px;">${errors}</div>` : "") +
+    (skipped ? `<details style="margin-top:4px;"><summary class="muted">${res.skipped.length} skipped</summary>${skipped}</details>` : "");
+  if (res.errors.length) {
+    showMsg(`Bulk switch finished with ${res.errors.length} error(s)`, "err");
+  } else {
+    showMsg(`Bulk switch ${res.from} &rarr; ${res.to}: ${res.switched.length} origins updated`, "ok");
+  }
+}
+
+async function pingHost(id) {
+  const dot = document.querySelector(`[data-status-for="${CSS.escape(id)}"]`);
+  dot.className = "status-dot";
+  const { data } = await api("api/host/ping", { method: "POST", body: formBody({ id }) });
+  if (data && data.online) {
+    dot.classList.add("online");
+    showMsg("Host online (docker " + (data.daemon_version || "?") + ")", "ok");
+  } else {
+    dot.classList.add("offline");
+    showMsg("Host unreachable: " + (data && data.error ? data.error : "unknown error"), "err");
+  }
+}
+
+let editingId = null;
+function openEditor(h) {
+  editingId = h ? h.id : null;
+  $("#hostEditorSummary").textContent = h ? "Edit host" : "Add Docker host";
+  $("#hName").value = h ? (h.name || "") : "";
+  $("#hEndpoint").value = h ? (h.endpoint || "") : "";
+  $("#hSuggestIP").value = h ? (h.suggest_ip || "") : "";
+  $("#hTLS").checked = h ? !!h.tls : false;
+  $("#hInsecure").checked = h ? !!h.insecure_skip_tls : false;
+  $("#hCACert").value = h ? (h.ca_cert_path || "") : "";
+  $("#hCert").value = h ? (h.client_cert_path || "") : "";
+  $("#hKey").value = h ? (h.client_key_path || "") : "";
+  $("#cancelHostBtn").hidden = !h;
+  $("#hostEditor").open = true;
+}
+
+async function saveHost() {
+  const obj = {
+    id: editingId || "",
+    name: $("#hName").value.trim(),
+    endpoint: $("#hEndpoint").value.trim(),
+    suggest_ip: $("#hSuggestIP").value.trim(),
+    tls: $("#hTLS").checked ? "true" : "false",
+    insecure_skip_tls: $("#hInsecure").checked ? "true" : "false",
+    ca_cert_path: $("#hCACert").value.trim(),
+    client_cert_path: $("#hCert").value.trim(),
+    client_key_path: $("#hKey").value.trim(),
+  };
+  const { data } = await api("api/config/host", { method: "POST", body: formBody(obj) });
+  if (data && data.error) {
+    showMsg("Failed to save host: " + data.error, "err");
+    return;
+  }
+  editingId = data ? data.host_id : null;
+  showMsg("Host saved", "ok");
+  $("#hostEditor").open = false;
+  await loadConfig();
+}
+
+async function removeHost(id) {
+  if (!confirm("Remove docker host?")) return;
+  await api("api/config/host/remove", { method: "POST", body: formBody({ id }) });
+  await loadConfig();
+}
+
+async function savePolling() {
+  const seconds = parseInt($("#pollSeconds").value, 10) || 10;
+  await api("api/config/polling", { method: "POST", body: formBody({ seconds }) });
+}
+
+// ---------- endpoints ----------
+async function loadEndpoints() {
+  const { data } = await api("api/endpoints");
+  const select = $("#endpointSelect");
+  const previous = select.value;
+  select.innerHTML = `<option value="">Select a proxy rule ...</option>`;
+  if (Array.isArray(data) && data.length) {
+    data
+      .filter((e) => e.RootOrMatchingDomain)
+      .sort((a, b) => a.RootOrMatchingDomain.localeCompare(b.RootOrMatchingDomain))
+      .forEach((e) => {
+        const opt = document.createElement("option");
+        opt.value = e.RootOrMatchingDomain;
+        opt.textContent = e.RootOrMatchingDomain + (e.Disabled ? " (disabled)" : "");
+        select.appendChild(opt);
+      });
+    if (data.some((e) => e.RootOrMatchingDomain === previous)) {
+      select.value = previous;
+    }
+  } else {
+    select.appendChild(new Option("(no proxy rules found)", ""));
+  }
+  updateApplyButtons();
+}
+
+// ---------- scan ----------
+function doScan() {
+  renderScan(null);
+  $("#scanResult").classList.add("loading");
+  api("api/scan").then(({ data }) => {
+    $("#scanResult").classList.remove("loading");
+    renderScan(Array.isArray(data) ? data : []);
+  }).catch((e) => {
+    $("#scanResult").classList.remove("loading");
+    showMsg("Scan failed: " + e.message, "err");
+  });
+}
+
+function renderScan(groups) {
+  const scans = $("#scanResult");
+  if (!groups) {
+    scans.innerHTML = `<div class="empty">Scanning hosts ...</div>`;
+    return;
+  }
+  if (!groups.length) {
+    scans.innerHTML = `<div class="empty">No docker hosts configured yet.</div>`;
+    return;
+  }
+
+  let html = "";
+  groups.forEach((g) => {
+    const hostLabel = g.online
+      ? `<b>${esc(g.host_name)}</b> <span class="muted">${esc(g.endpoint)}</span>` +
+        (g.daemon_version ? ` <span class="muted">(docker ${esc(g.daemon_version)})</span>` : "")
+      : `<b>${esc(g.host_name)}</b> <span class="muted">${esc(g.endpoint)}</span> <span class="state-stopped">offline</span>`;
+
+    const rows = (g.candidates || []).map((c) => renderCandidateRow(c)).join("");
+    const services = (g.services || []).map(renderServiceRows).join("");
+    const svcCount = (g.services || []).length;
+    const showPlain = rows || !svcCount;
+    html += `
+      <div class="card" data-host="${esc(g.host_id)}">
+        <div class="row">${hostLabel}
+          <span class="grow"></span>
+          <span class="muted" style="font-size:12px;">${(g.containers || []).length} containers${svcCount ? ` &middot; ${svcCount} services` : ""}</span>
+        </div>
+        ${g.error ? `<div class="muted" style="color:var(--err);margin-top:6px;">${esc(g.error)}</div>` : ""}
+        ${showPlain ? `
+        <div style="overflow-x:auto;margin-top:8px;">
+        <table>
+          <thead><tr>
+            <th>Container</th><th>Upstream address</th><th>Proxy rule</th><th></th>
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="4"><div class="empty">No candidates${g.error ? "" : " (no published ports found)"}</div></td></tr>`}</tbody>
+        </table>
+        </div>` : ""}
+        ${svcCount ? `
+        <div style="overflow-x:auto;margin-top:12px;border-top:1px solid rgba(127,127,127,.25);padding-top:8px;">
+        <span class="muted" style="font-size:12px;">Swarm services (tasks grouped, replicas collapsed) &mdash; published ports only</span>
+        <table>
+          <thead><tr>
+            <th>Service</th><th>Upstream address</th><th>Proxy rule</th><th></th>
+          </tr></thead>
+          <tbody>${services}</tbody>
+        </table>
+        </div>` : ""}
+      </div>`;
+  });
+  scans.innerHTML = html;
+  applyFilters();
+  updateApplyButtons();
+}
+
+// Renders the proxy rule(s) that already use this port as upstream. The rule's
+// origin address is only appended when it differs from the candidate address
+// (e.g. a swarm port linked to a different node). Clicking a rule jumps into
+// the Zoraxy HTTP proxy editor for that rule.
+function hexEncode(str) {
+  let result = "";
+  for (let i = 0; i < str.length; i++) {
+    result += ("000" + str.charCodeAt(i).toString(16)).slice(-4);
+  }
+  return result;
+}
+
+function hexDecode(hex) {
+  let back = "";
+  (hex.match(/.{1,4}/g) || []).forEach((h) => (back += String.fromCharCode(parseInt(h, 16))));
+  return back;
+}
+
+function openRuleEdit(encodedHex) {
+  try {
+    const domain = hexDecode(encodedHex);
+    const parent = window.parent;
+    if (!parent || typeof parent.openTabById !== "function") {
+      showMsg("Zoraxy-Bedienoberfläche nicht erreichbar", "err");
+      return;
+    }
+    parent.openTabById("httprp");
+    const deadline = Date.now() + 15000;
+    const poll = setInterval(() => {
+      const ready =
+        parent.editEndpoint && typeof parent.editEndpoint === "function" &&
+        parent.$ && parent.$('tr[eptuuid="' + domain + '"]').length > 0;
+      if (ready || Date.now() > deadline) {
+        clearInterval(poll);
+        if (ready) {
+          parent.editEndpoint(encodedHex);
+        } else {
+          showMsg("Regel '" + domain + "' nicht in der Zoraxy-Liste gefunden", "err");
+        }
+      }
+    }, 300);
+  } catch (e) {
+    showMsg("Zoraxy-Editor nicht öffnbar: " + e.message, "err");
+  }
+}
+
+function renderLinkedTo(linkedTo, addr) {
+  const list = Array.isArray(linkedTo) ? linkedTo.filter((r) => r && r.domain) : [];
+  if (!list.length) return `<span class="muted">-</span>`;
+  return list
+    .map((r) => {
+      const same = r.origin && addr && r.origin.toLowerCase() === addr.toLowerCase();
+      const origin = r.origin && !same ? ` <span class="linked-origin">&rarr; ${esc(r.origin)}</span>` : "";
+      return `<div class="linked-to"><a class="proxy-rule-link" title="Regel in Zoraxy öffnen" onclick="openRuleEdit('${hexEncode(r.domain)}')">${esc(r.domain)}</a>${origin}</div>`;
+    })
+    .join("");
+}
+
+// Extra search terms for the linked proxy rules.
+function linkedSearch(linkedTo) {
+  return (Array.isArray(linkedTo) ? linkedTo : [])
+    .map((r) => (r ? `${r.domain || ""} ${r.origin || ""}` : ""))
+    .join(" ");
+}
+
+// Synces the "Set as upstream" buttons with the currently selected proxy rule.
+function updateApplyButtons() {
+  const enabled = !!$("#endpointSelect").value;
+  $all(".btn-apply").forEach((b) => (b.disabled = !enabled));
+}
+
+function renderCandidateRow(c) {
+  const running = c.state === "running";
+  const stateClass = running ? "state-running" : "state-stopped";
+  const canApply = !!$("#endpointSelect").value;
+  return `
+    <tr data-kind="${esc(c.kind)}" data-state="${esc(c.state)}" data-search="${esc((c.container_name + " " + c.address + " " + c.image + " " + linkedSearch(c.linked_to)).toLowerCase())}">
+      <td>
+        <div>${esc(c.container_name || c.container_id)} <span class="muted ${stateClass}" style="font-size:11px;">${running ? "running" : "stopped"}</span></div>
+        <div class="muted" style="font-size:11px;">${esc(c.image)}</div>
+      </td>
+<td class="mono">${esc(c.address)}<span class="ampel ${c.reachable ? "ok" : "bad"}" title="${c.reachable ? "port reachable" : "port unreachable from Zoraxy"}"></span></td>
+        <td>${renderLinkedTo(c.linked_to, c.address)}</td>
+      <td style="white-space:nowrap;">
+        <button class="ghost small btn-copy" data-address="${esc(c.address)}">Copy</button>
+        <button class="small btn-apply" data-address="${esc(c.address)}" ${canApply ? "" : "disabled"}>Set as upstream</button>
+      </td>
+    </tr>`;
+}
+
+function renderServiceRows(sv) {
+  const reps = `${sv.running}/${sv.replicas} running`;
+  return (sv.candidates || []).map((c) => {
+    const running = c.state === "running";
+    const canApply = !!$("#endpointSelect").value;
+    const search = esc((sv.name + " " + c.address + " " + c.image + " " + linkedSearch(c.linked_to)).toLowerCase());
+    return `
+      <tr data-kind="${esc(c.kind)}" data-state="${running ? "running" : "stopped"}" data-search="${search}">
+        <td>
+          <div>${esc(sv.name)} <span class="muted" style="font-size:11px;">${esc(reps)}</span></div>
+          <div class="muted" style="font-size:11px;">${esc(c.image)}</div>
+        </td>
+        <td class="mono">${esc(c.address)}<span class="ampel ${c.reachable ? "ok" : "bad"}" title="${c.reachable ? "port reachable" : "port unreachable from Zoraxy"}"></span></td>
+        <td>${renderLinkedTo(c.linked_to, c.address)}</td>
+        <td style="white-space:nowrap;">
+          <button class="ghost small btn-copy" data-address="${esc(c.address)}">Copy</button>
+          <button class="small btn-apply" data-address="${esc(c.address)}" ${canApply ? "" : "disabled"}>Set as upstream</button>
+        </td>
+      </tr>`;
+  }).join("");
+}
+
+function applyFilters() {
+  const term = $("#searchBox").value.trim().toLowerCase();
+  const onlyRunning = $("#onlyRunning").checked;
+
+  [...document.querySelectorAll("#scanResult tr[data-kind]")].forEach((tr) => {
+    let visible = true;
+    if (onlyRunning && tr.dataset.state !== "running") visible = false;
+    if (tr.dataset.search && !tr.dataset.search.includes(term)) visible = false;
+    tr.style.display = visible ? "" : "none";
+  });
+  $all("#scanResult .card").forEach((card) => {
+    const rows = card.querySelectorAll("tbody tr");
+    let any = false;
+    rows.forEach((r) => { if (r.style.display !== "none") any = true; });
+    card.style.display = any ? "" : "none";
+  });
+}
+
+async function copyAddress(addr) {
+  try {
+    await navigator.clipboard.writeText(addr);
+    showMsg("Copied " + addr, "ok");
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = addr;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    showMsg("Copied " + addr, "ok");
+  }
+}
+
+async function applyUpstream(addr, btn) {
+  const ep = $("#endpointSelect").value;
+  if (!ep) {
+    showMsg("Select a proxy rule first", "err");
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Applying ...";
+  const { data } = await api("api/apply", {
+    method: "POST",
+    body: formBody({ ep, origin: addr }),
+  });
+  btn.disabled = false;
+  btn.textContent = "Set as upstream";
+  if (data && data.error) {
+    showMsg("Failed to add upstream: " + data.error, "err");
+  } else {
+    showMsg("Upstream added: " + addr + " -> " + ep, "ok");
+    if (window.parent && window.parent.msgbox) {
+      window.parent.msgbox("Upstream " + addr + " added to " + ep);
+    }
+  }
+}
+
+// ---------- wiring ----------
+$("#addHostBtn").addEventListener("click", () => openEditor(null));
+$("#saveHostBtn").addEventListener("click", saveHost);
+$("#cancelHostBtn").addEventListener("click", () => {
+  $("#hostEditor").open = false;
+  editingId = null;
+});
+$("#scanBtn").addEventListener("click", doScan);
+$("#reloadEndpoints").addEventListener("click", loadEndpoints);
+$("#switchPreviewBtn").addEventListener("click", showSwitchPreview);
+$("#switchBtn").addEventListener("click", executeSelectedSwitch);
+$("#switchSelectAll").addEventListener("change", (e) => {
+  $all(".switch-rule").forEach((b) => (b.checked = e.target.checked));
+  updateSwitchActions();
+});
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains("switch-rule")) {
+    updateSwitchActions();
+  }
+});
+$("#switchFrom").addEventListener("change", () => {
+  if ($("#switchFrom").value && $("#switchFrom").value === $("#switchTo").value) {
+    $("#switchTo").value = hosts.find((h) => (h.name || "") !== $("#switchFrom").value)?.name || "";
+  }
+});
+$("#switchTo").addEventListener("change", () => {
+  if ($("#switchTo").value && $("#switchTo").value === $("#switchFrom").value) {
+    $("#switchFrom").value = hosts.find((h) => (h.name || "") !== $("#switchTo").value)?.name || "";
+  }
+});
+  $("#endpointSelect").addEventListener("change", updateApplyButtons);
+$("#searchBox").addEventListener("input", applyFilters);
+$("#onlyRunning").addEventListener("change", applyFilters);
+
+$("#autoRefresh").addEventListener("change", () => {
+  if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+  if ($("#autoRefresh").checked) {
+    savePolling();
+    const secs = parseInt($("#pollSeconds").value, 10) || 10;
+    pollingTimer = setInterval(doScan, secs * 1000);
+  }
+});
+$("#pollSeconds").addEventListener("change", () => {
+  savePolling();
+  if (pollingTimer) {
+    clearInterval(pollingTimer);
+    const secs = parseInt($("#pollSeconds").value, 10) || 10;
+    pollingTimer = setInterval(doScan, secs * 1000);
+  }
+});
+
+window.addEventListener("load", async () => {
+  await loadCSRF();
+  await Promise.all([loadConfig(), loadEndpoints()]);
+});
+
+document.addEventListener("click", (e) => {
+  const copy = e.target.closest(".btn-copy");
+  if (copy) copyAddress(copy.dataset.address).catch(() => {});
+  const apply = e.target.closest(".btn-apply");
+  if (apply) applyUpstream(apply.dataset.address, apply).catch(() => {});
+});
+</script>
+</body>
+</html>
